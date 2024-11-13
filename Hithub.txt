@@ -1,0 +1,54 @@
+import os
+from datetime import datetime
+import re
+import ctypes
+from ctypes import wintypes
+
+def alterar_data_criacao_modificacao(pasta):
+    # Função para alterar a data de criação no Windows
+    def alterar_data_criacao_windows(caminho_arquivo, data_timestamp):
+        # Converte a data para FILETIME
+        data_filetime = int((data_timestamp - 11644473600) * 10000000)
+        data_baixa = wintypes.DWORD(data_filetime & 0xFFFFFFFF)
+        data_alta = wintypes.DWORD(data_filetime >> 32)
+        
+        # Define a data de criação, acesso e modificação
+        handle = ctypes.windll.kernel32.CreateFileW(
+            caminho_arquivo, 256, 0, None, 3, 128, None
+        )
+        if handle == -1:
+            raise ctypes.WinError()
+        try:
+            ctypes.windll.kernel32.SetFileTime(handle, ctypes.byref(data_baixa), None, ctypes.byref(data_baixa))
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+
+    # Expressão regular para capturar a data no formato DD.MM.AAAA
+    padrao_data = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})")
+
+    # Itera sobre todos os arquivos na pasta especificada
+    for arquivo in os.listdir(pasta):
+        # Verifica se é um arquivo Excel (.xls)
+        if arquivo.endswith('.xls'):
+            caminho_arquivo = os.path.join(pasta, arquivo)
+            
+            # Busca pela data no nome do arquivo
+            correspondencia = padrao_data.search(arquivo)
+            if correspondencia:
+                dia, mes, ano = correspondencia.groups()
+                data_str = f"{ano}-{mes}-{dia} 00:00:00"
+                
+                # Converte a data extraída para um timestamp
+                data_timestamp = datetime.strptime(data_str, "%Y-%m-%d %H:%M:%S").timestamp()
+                
+                # Altera a data de modificação e criação
+                os.utime(caminho_arquivo, (data_timestamp, data_timestamp))
+                alterar_data_criacao_windows(caminho_arquivo, data_timestamp)
+                
+                print(f"Datas de criação e modificação de '{arquivo}' alteradas para {data_str}")
+
+# Solicita a pasta onde estão os arquivos
+pasta = input("Digite o caminho da pasta onde estão os arquivos Excel: ")
+
+# Executa a função
+alterar_data_criacao_modificacao(pasta)
