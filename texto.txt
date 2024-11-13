@@ -1,0 +1,56 @@
+import os
+from datetime import datetime
+import re
+import ctypes
+from ctypes import wintypes
+
+def update_creation_and_modification_dates(folder):
+    # Function to change creation date on Windows
+    def change_creation_date_windows(file_path, date_timestamp):
+        # Convert the date to FILETIME
+        date_filetime = int((date_timestamp - 11644473600) * 10000000)
+        low_date = wintypes.DWORD(date_filetime & 0xFFFFFFFF)
+        high_date = wintypes.DWORD(date_filetime >> 32)
+        
+        # Set creation, access, and modification dates
+        handle = ctypes.windll.kernel32.CreateFileW(
+            file_path, 256, 0, None, 3, 128, None
+        )
+        if handle == -1:
+            raise ctypes.WinError()
+        try:
+            ctypes.windll.kernel32.SetFileTime(handle, ctypes.byref(low_date), None, ctypes.byref(low_date))
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+
+    # Regular expression to capture date in DD.MM.YYYY format
+    date_pattern = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})")
+
+    # Iterate over all files in the specified folder
+    for file in os.listdir(folder):
+        # Check if it is an Excel file (.xls)
+        if file.endswith('.xls'):
+            file_path = os.path.join(folder, file)
+            
+            # Search for date in the file name
+            match = date_pattern.search(file)
+            if match:
+                day, month, year = match.groups()
+                date_str = f"{year}-{month}-{day} 00:00:00"
+                
+                # Convert extracted date to a timestamp
+                date_timestamp = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S").timestamp()
+                
+                # Update modification and creation dates
+                os.utime(file_path, (date_timestamp, date_timestamp))
+                change_creation_date_windows(file_path, date_timestamp)
+                
+                print(f"Creation and modification dates of '{file}' updated to {date_str}")
+
+# Request the folder path from the user
+folder = input("Enter the path of the folder containing Excel files: ")
+
+# Run the function
+update_creation_and_modification_dates(folder)
+
+        
